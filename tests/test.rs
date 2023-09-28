@@ -290,6 +290,7 @@ mod test_bdd_builder {
     use rsdd::repr::WmcParams;
     use rsdd::repr::{create_semantic_hash_map, DDNNFPtr};
     use rsdd::util::semirings::ExpectedUtility;
+    use rsdd::util::semirings::FiniteField;
     use rsdd::util::semirings::RealSemiring;
     use rsdd::util::semirings::Semiring;
     use std::collections::HashMap;
@@ -344,6 +345,24 @@ mod test_bdd_builder {
         }
     }
 
+    quickcheck! {
+        fn exactly_one_test (c : Cnf) -> TestResult {
+          let n = c.num_vars();
+          let builder = super::RobddBuilder::<AllIteTable<BddPtr>>::new_with_linear_order(n);
+          let f = |i : usize| builder.var(VarLabel::new_usize(i), true);
+          let asdfasdf : Vec<BddPtr<'_>> = (0..n).map(|x| f(x)).collect();
+          let a = builder.exactly_one(&asdfasdf);
+          let unweighted_params: WmcParams<FiniteField<{ primes::U64_LARGEST }>> =
+            WmcParams::new(HashMap::from_iter(
+              (0..n as u64)
+              .map(|v| (VarLabel::new(v), (FiniteField::one(), FiniteField::one()))),
+          ));
+          let mc  = a.unsmoothed_wmc(&unweighted_params).value();
+          // println!("{:?}, {:?}\n", mc, n);
+          let n2 = n as u128;
+          TestResult::from_bool(mc == n2)
+        }
+    }
     quickcheck! {
         fn compile_with_assignments(c1: Cnf) -> TestResult {
             if c1.num_vars() < 3 || c1.num_vars() > 8 { return TestResult::discard() }
