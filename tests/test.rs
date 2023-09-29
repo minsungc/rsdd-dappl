@@ -352,15 +352,19 @@ mod test_bdd_builder {
           let f = |i : usize| builder.var(VarLabel::new_usize(i), true);
           let asdfasdf : Vec<BddPtr<'_>> = (0..n).map(|x| f(x)).collect();
           let a = builder.exactly_one(&asdfasdf);
+          // then do the other thing
+          let asdfasdf2 : Vec<VarLabel>= (0..n).map(|x| VarLabel::new_usize(x)).collect();
+          let b = builder.exactly_one_of_varlabels(&asdfasdf2);
           let unweighted_params: WmcParams<FiniteField<{ primes::U64_LARGEST }>> =
             WmcParams::new(HashMap::from_iter(
               (0..n as u64)
               .map(|v| (VarLabel::new(v), (FiniteField::one(), FiniteField::one()))),
           ));
           let mc  = a.unsmoothed_wmc(&unweighted_params).value();
+          let mc2  = b.unsmoothed_wmc(&unweighted_params).value();
           // println!("{:?}, {:?}\n", mc, n);
           let n2 = n as u128;
-          TestResult::from_bool(mc == n2)
+          TestResult::from_bool((mc == n2) && (mc2 == n2))
         }
     }
     quickcheck! {

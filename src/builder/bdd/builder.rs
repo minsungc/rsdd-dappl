@@ -55,6 +55,12 @@ pub trait BddBuilder<'a>: BottomUpBuilder<'a, BddPtr<'a>> {
       self.and(target, at_least_one)
     }
 
+    fn exactly_one_of_varlabels(&'a self, f: &[VarLabel]) -> BddPtr<'a> {
+      let varlabel_to_ptr = |x : VarLabel| self.var(x, true);
+      let f2 : Vec<_>= f.iter().map(|x| varlabel_to_ptr(*x)).collect();
+      self.exactly_one(&f2)
+    }
+
     fn compile_cnf_with_assignments(&'a self, cnf: &Cnf, assgn: &PartialModel) -> BddPtr<'a> {
         let clauses = cnf.clauses();
         if clauses.is_empty() {
