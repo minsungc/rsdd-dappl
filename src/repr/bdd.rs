@@ -706,7 +706,7 @@ impl<'a> BddPtr<'a> {
                 };
                 for (upper_bound, partialmodel) in order {
                     // branch + bound
-                    if upper_bound.1 > best_lb.1 {
+                    if !(upper_bound < best_lb) {
                         (best_lb, best_model) = self.meu_h(
                             evidence,
                             best_lb,
