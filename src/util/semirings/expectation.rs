@@ -2,7 +2,7 @@
 use super::semiring_traits::*;
 use std::{cmp::Ordering, fmt::Display, ops};
 
-#[derive(Debug, Clone, Copy, PartialEq, ocaml::ToValue, ocaml::FromValue)]
+#[derive(Debug, Clone, Copy, PartialEq, ocaml::FromValue, ocaml::ToValue)]
 pub struct ExpectedUtility(pub f64, pub f64);
 
 impl ops::Add<ExpectedUtility> for ExpectedUtility {

@@ -17,7 +17,7 @@ use std::{
     collections::HashMap,
     hash::{Hash, Hasher},
     iter::FromIterator,
-    ptr,
+    ptr, f64::NEG_INFINITY,
 };
 use BddPtr::*;
 
@@ -737,9 +737,7 @@ impl<'a> BddPtr<'a> {
             .map(|x| Literal::new(*x, true))
             .collect();
         let cur_assgn = PartialModel::from_litvec(&all_true, num_vars);
-        // Calculate bound wrt the partial instantiation.
-        let lower_bound = self.eu_ub(&cur_assgn, &BitSet::new(), wmc)
-            / evidence.bb_lb(&cur_assgn, &BitSet::new(), wmc);
+        let lower_bound = ExpectedUtility(0.0, NEG_INFINITY);
         self.meu_h(
             evidence,
             lower_bound,
