@@ -667,6 +667,7 @@ impl<'a> BddPtr<'a> {
             [] => {
                 // Run the eu ub
                 let decision_bitset = BitSet::new();
+                if self.is_false() { (cur_lb, cur_best)} else {
                 let possible_best = self.eu_ub(&cur_assgn, &decision_bitset, wmc)
                     / evidence.bb_lb(&cur_assgn, &decision_bitset, wmc);
                 // If it's a better lb, update.
@@ -675,7 +676,7 @@ impl<'a> BddPtr<'a> {
                 } else {
                     (cur_lb, cur_best)
                 }
-            }
+            }}
             // If there exists an unassigned decision variable,
             [x, end @ ..] => {
                 let mut best_model = cur_best;
@@ -723,7 +724,7 @@ impl<'a> BddPtr<'a> {
     }
 
     /// maximum expected utility calc, scaled for evidence.
-    /// introduced in Section 5 of the daPPL paper
+    /// introduced in Section 5 of the dappl paper
     pub fn meu(
         &self,
         evidence: BddPtr,
