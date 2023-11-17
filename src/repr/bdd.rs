@@ -7,7 +7,7 @@ use crate::{
     repr::{DDNNFPtr, DDNNF},
     repr::{Literal, VarLabel, VarSet},
     util::semirings::{BBSemiring, FiniteField, JoinSemilattice, RealSemiring},
-    util::semirings::{ExpectedUtility, LatticeWithChoose, MeetSemilattice},
+    util::semirings::{ExpectedUtility, LatticeWithChoose, MeetSemilattice}, builder::bdd,
 };
 use bit_set::BitSet;
 use core::fmt::Debug;
@@ -616,137 +616,147 @@ impl<'a> BddPtr<'a> {
 
     /// upper-bounding the expected utility, for meu_h
     fn eu_ub(
-        &self,
-        partial_decisions: &PartialModel,
-        decision_vars: &BitSet,
-        wmc: &WmcParams<ExpectedUtility>,
+      &self,
+      partial_decisions: &PartialModel,
+      decision_vars: &BitSet,
+      wmc: &WmcParams<ExpectedUtility>,
     ) -> ExpectedUtility {
-        // println!("Assigned decision variables: {:?}", partial_decisions);
+      // println!("Assigned decision variables: {:?}", partial_decisions);
 
-        // accumulator for EU via bdd_fold
+      // accumulator for EU via bdd_fold
 
-        self.bdd_fold(
-            &|varlabel, low: ExpectedUtility, high: ExpectedUtility| {
-                // get True and False weights for VarLabel
-                let (false_w, true_w) = wmc.var_weight(varlabel);
-                // Check if our partial model has already assigned my variable.
-                match partial_decisions.get(varlabel) {
-                    // If not...
-                    None => {
-                        // If it's a decision variable, we do
-                        if decision_vars.contains(varlabel.value_usize()) {
-                            let max_pr = f64::max(low.0, high.0);
-                            let max_eu = f64::max(low.1, high.1);
-                            ExpectedUtility(max_pr, max_eu)
-                        // Otherwise it's just a probabilistic variable so you do
-                        // the usual stuff...
-                        } else {
-                            (*false_w * low) + (*true_w * high)
-                        }
-                    }
-                    Some(true) => high,
-                    Some(false) => low,
-                }
-            },
-            wmc.zero,
-            wmc.one,
-        )
+      self.bdd_fold(
+          &|varlabel, low: ExpectedUtility, high: ExpectedUtility| {
+              // get True and False weights for VarLabel
+              let (false_w, true_w) = wmc.var_weight(varlabel);
+              // Check if our partial model has already assigned my variable.
+              match partial_decisions.get(varlabel) {
+                  // If not...
+                  None => {
+                      // If it's a decision variable, we do
+                      if decision_vars.contains(varlabel.value_usize()) {
+                          let max_pr = f64::max(low.0, high.0);
+                          let max_eu = f64::max(low.1, high.1);
+                          ExpectedUtility(max_pr, max_eu)
+                      // Otherwise it's just a probabilistic variable so you do
+                      // the usual stuff...
+                      } else {
+                          (*false_w * low) + (*true_w * high)
+                      }
+                  }
+                  Some(true) => high,
+                  Some(false) => low,
+              }
+          },
+          wmc.zero,
+          wmc.one,
+      )
     }
 
     fn meu_h(
-        &self,
-        evidence: BddPtr,
-        cur_lb: ExpectedUtility,
-        cur_best: PartialModel,
-        decision_vars: &[VarLabel],
-        wmc: &WmcParams<ExpectedUtility>,
-        cur_assgn: PartialModel,
-    ) -> (ExpectedUtility, PartialModel) {
-        match decision_vars {
-            // If all decision variables are assigned,
-            [] => {
-                // Run the eu ub
-                let decision_bitset = BitSet::new();
-                if self.is_false() { (cur_lb, cur_best)} else {
-                let possible_best = self.eu_ub(&cur_assgn, &decision_bitset, wmc)
-                    / evidence.bb_lb(&cur_assgn, &decision_bitset, wmc);
-                // If it's a better lb, update.
-                if possible_best.1 > cur_lb.1 {
-                    (possible_best, cur_assgn)
-                } else {
-                    (cur_lb, cur_best)
-                }
-            }}
-            // If there exists an unassigned decision variable,
-            [x, end @ ..] => {
-                let mut best_model = cur_best;
-                let mut best_lb = cur_lb;
-                let margvar_bits = BitSet::from_iter(end.iter().map(|x| x.value_usize()));
-                // Consider the assignment of it to true...
-                let mut true_model = cur_assgn.clone();
-                true_model.set(*x, true);
-                // ... and false...
-                let mut false_model = cur_assgn;
-                false_model.set(*x, false);
+      &self,
+      evidence: BddPtr,
+      cur_lb: ExpectedUtility,
+      cur_best: PartialModel,
+      decision_vars: &[VarLabel],
+      wmc: &WmcParams<ExpectedUtility>,
+      cur_assgn: PartialModel,
+      mut times_pruned : u64,
+      mut avg_size : f64
+    ) -> (ExpectedUtility, PartialModel, u64, f64) {
+      match decision_vars {
+          // If all decision variables are assigned,
+          [] => {
+              // Run the eu ub
+              let decision_bitset = BitSet::new();
+              let possible_best = self.eu_ub(&cur_assgn, &decision_bitset, wmc)
+                  / evidence.bb_lb(&cur_assgn, &decision_bitset, wmc);
+              // If it's a better lb, update.
+              if possible_best.1 > cur_lb.1 {
+                  (possible_best, cur_assgn, times_pruned, avg_size)
+              } else {
+                  (cur_lb, cur_best, times_pruned, avg_size)
+              }
+          }
+          // If there exists an unassigned decision variable,
+          [x, end @ ..] => {
+              let mut best_model = cur_best;
+              let mut best_lb = cur_lb;
+              let margvar_bits = BitSet::from_iter(end.iter().map(|x| x.value_usize()));
+              // Consider the assignment of it to true...
+              let mut true_model = cur_assgn.clone();
+              true_model.set(*x, true);
+              // ... and false...
+              let mut false_model = cur_assgn;
+              false_model.set(*x, false);
 
-                // and calculate their respective upper bounds.
-                let true_ub_num = self.eu_ub(&true_model, &margvar_bits, wmc);
-                let false_ub_num = self.eu_ub(&false_model, &margvar_bits, wmc);
+              // and calculate their respective upper bounds.
+              let true_ub_num = self.eu_ub(&true_model, &margvar_bits, wmc);
+              let false_ub_num = self.eu_ub(&false_model, &margvar_bits, wmc);
 
-                let true_ub_dec = evidence.bb_lb(&true_model, &margvar_bits, wmc);
-                let false_ub_dec = evidence.bb_lb(&false_model, &margvar_bits, wmc);
+              let true_ub_dec = evidence.bb_lb(&true_model, &margvar_bits, wmc);
+              let false_ub_dec = evidence.bb_lb(&false_model, &margvar_bits, wmc);
 
-                let true_ub = true_ub_num / true_ub_dec;
-                let false_ub = false_ub_num / false_ub_dec;
+              let true_ub = true_ub_num / true_ub_dec;
+              let false_ub = false_ub_num / false_ub_dec;
 
-                // branch on the greater upper-bound first
-                let order = if true_ub.1 > false_ub.1 {
-                    [(true_ub, true_model), (false_ub, false_model)]
-                } else {
-                    [(false_ub, false_model), (true_ub, true_model)]
-                };
-                for (upper_bound, partialmodel) in order {
-                    // branch + bound
-                    if !(upper_bound < best_lb) {
-                        (best_lb, best_model) = self.meu_h(
-                            evidence,
-                            best_lb,
-                            best_model,
-                            end,
-                            wmc,
-                            partialmodel.clone(),
-                        )
-                    }
-                }
-                (best_lb, best_model)
-            }
-        }
+              // branch on the greater upper-bound first
+              let order = if true_ub.1 > false_ub.1 {
+                  [(true_ub, true_model), (false_ub, false_model)]
+              } else {
+                  [(false_ub, false_model), (true_ub, true_model)]
+              };
+              for (upper_bound, partialmodel) in order {
+                  // branch + bound
+                  if upper_bound.1 > best_lb.1 {
+                      (best_lb, best_model, times_pruned, avg_size) = self.meu_h(
+                          evidence,
+                          best_lb,
+                          best_model,
+                          end,
+                          wmc,
+                          partialmodel.clone(),
+                          times_pruned, avg_size
+                      )
+                  }
+                  else { 
+                    let mut total = avg_size * (times_pruned as f64) + (self.count_nodes() as f64);
+                    times_pruned = times_pruned + 1;
+                    avg_size = total / (times_pruned as f64);}
+              }
+              (best_lb, best_model, times_pruned, avg_size)
+          }
+      }
     }
 
     /// maximum expected utility calc, scaled for evidence.
-    /// introduced in Section 5 of the dappl paper
+    /// introduced in Section 5 of the daPPL paper
     pub fn meu(
-        &self,
-        evidence: BddPtr,
-        decision_vars: &[VarLabel],
-        num_vars: usize,
-        wmc: &WmcParams<ExpectedUtility>,
-    ) -> (ExpectedUtility, PartialModel) {
-        // Initialize all the decision variables to be true
-        let all_true: Vec<Literal> = decision_vars
-            .iter()
-            .map(|x| Literal::new(*x, true))
-            .collect();
-        let cur_assgn = PartialModel::from_litvec(&all_true, num_vars);
-        let lower_bound = ExpectedUtility(0.0, NEG_INFINITY);
-        self.meu_h(
-            evidence,
-            lower_bound,
-            cur_assgn,
-            decision_vars,
-            wmc,
-            PartialModel::from_litvec(&[], num_vars),
-        )
+      &self,
+      evidence: BddPtr,
+      decision_vars: &[VarLabel],
+      num_vars: usize,
+      wmc: &WmcParams<ExpectedUtility>,
+    ) -> (ExpectedUtility, PartialModel, u64, u64, f64) {
+      // Initialize all the decision variables to be true
+      let size = self.count_nodes() as u64;
+      let all_true: Vec<Literal> = decision_vars
+          .iter()
+          .map(|x| Literal::new(*x, true))
+          .collect();
+      let cur_assgn = PartialModel::from_litvec(&all_true, num_vars);
+      // Calculate bound wrt the partial instantiation.
+      let lower_bound = self.eu_ub(&cur_assgn, &BitSet::new(), wmc)
+          / evidence.bb_lb(&cur_assgn, &BitSet::new(), wmc);
+      let (a,b, times_pruned, avg_size) = self.meu_h(
+          evidence,
+          lower_bound,
+          cur_assgn,
+          decision_vars,
+          wmc,
+          PartialModel::from_litvec(&[], num_vars), 0, 0.0
+      );
+      (a,b, size, times_pruned, avg_size)
     }
 
     /// Below is experimental code with a generic branch and bound for T a BBAlgebra.

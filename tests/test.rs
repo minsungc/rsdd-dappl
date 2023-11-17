@@ -557,119 +557,119 @@ mod test_bdd_builder {
         }
     }
 
-    // quickcheck! {
-    //     fn meu(c1: Cnf) -> TestResult {
-    //         use rsdd::repr::PartialModel;
-    //         let n = c1.num_vars();
-    //         // constrain the size, make BDD
-    //         if !(5..=8).contains(&n) { return TestResult::discard() }
-    //         if c1.clauses().len() > 14 { return TestResult::discard() }
-    //         let builder = super::RobddBuilder::<AllIteTable<BddPtr>>::new_with_linear_order(n);
-    //         let cnf = builder.compile_cnf(&c1);
+    quickcheck! {
+        fn meu(c1: Cnf) -> TestResult {
+            use rsdd::repr::PartialModel;
+            let n = c1.num_vars();
+            // constrain the size, make BDD
+            if !(5..=8).contains(&n) { return TestResult::discard() }
+            if c1.clauses().len() > 14 { return TestResult::discard() }
+            let builder = super::RobddBuilder::<AllIteTable<BddPtr>>::new_with_linear_order(n);
+            let cnf = builder.compile_cnf(&c1);
 
-    //         // randomizing the decisions
-    //         let mut rng = rand::thread_rng();
-    //         let decisions : Vec<VarLabel> = (0..3).map(|_| VarLabel::new(rng.gen_range(0..(n-2)) as u64)).collect();
-    //         if decisions[0] == decisions[1] || decisions[1] == decisions[2] || decisions[0] == decisions[2] {
-    //             return TestResult::discard()
-    //         }
-    //         if !c1.var_in_cnf(decisions[0])
-    //            || !c1.var_in_cnf(decisions[1])
-    //            || !c1.var_in_cnf(decisions[2]) {
-    //             return TestResult::discard()
-    //         }
+            // randomizing the decisions
+            let mut rng = rand::thread_rng();
+            let decisions : Vec<VarLabel> = (0..3).map(|_| VarLabel::new(rng.gen_range(0..(n-2)) as u64)).collect();
+            if decisions[0] == decisions[1] || decisions[1] == decisions[2] || decisions[0] == decisions[2] {
+                return TestResult::discard()
+            }
+            if !c1.var_in_cnf(decisions[0])
+               || !c1.var_in_cnf(decisions[1])
+               || !c1.var_in_cnf(decisions[2]) {
+                return TestResult::discard()
+            }
 
-    //         // weight function and weight map
-    //         let probs : Vec<f64> = (0..n).map(|_| rng.gen_range(0.0..1.0)).collect();
-    //         let weight_fn = |x : usize| -> (VarLabel, (ExpectedUtility, ExpectedUtility)) {
-    //             let vx = VarLabel::new(x as u64);
-    //             if vx == decisions[0] || vx == decisions[1] || vx == decisions[2] {
-    //                 return (VarLabel::new(x as u64),
-    //                 (ExpectedUtility::one(), ExpectedUtility::one()))
-    //             }
-    //             if x == n-1 || x == n-2 {
-    //                 return (VarLabel::new(x as u64),
-    //                 (ExpectedUtility::one(), ExpectedUtility(1.0, 10.0)))
-    //             }
-    //             let pr = probs[x];
-    //             (vx, (ExpectedUtility(pr, 0.0), ExpectedUtility(1.0-pr, 0.0)))
-    //         };
-    //         let weight_map : HashMap<VarLabel, (ExpectedUtility, ExpectedUtility)> = HashMap::from_iter(
-    //             (0..n).map(&weight_fn));
+            // weight function and weight map
+            let probs : Vec<f64> = (0..n).map(|_| rng.gen_range(0.0..1.0)).collect();
+            let weight_fn = |x : usize| -> (VarLabel, (ExpectedUtility, ExpectedUtility)) {
+                let vx = VarLabel::new(x as u64);
+                if vx == decisions[0] || vx == decisions[1] || vx == decisions[2] {
+                    return (VarLabel::new(x as u64),
+                    (ExpectedUtility::one(), ExpectedUtility::one()))
+                }
+                if x == n-1 || x == n-2 {
+                    return (VarLabel::new(x as u64),
+                    (ExpectedUtility::one(), ExpectedUtility(1.0, 10.0)))
+                }
+                let pr = probs[x];
+                (vx, (ExpectedUtility(pr, 0.0), ExpectedUtility(1.0-pr, 0.0)))
+            };
+            let weight_map : HashMap<VarLabel, (ExpectedUtility, ExpectedUtility)> = HashMap::from_iter(
+                (0..n).map(&weight_fn));
 
-    //         // set up wmc, run meu
-    //         let vars = decisions.clone();
-    //         let wmc = WmcParams::new(weight_map);
-    //         let (meu , _meu_assgn) = cnf.meu(builder.true_ptr(),  &vars, builder.num_vars(), &wmc);
-    //         let (meu_bb, _meu_assgn_bb) = cnf.bb(&vars, builder.num_vars(), &wmc);
+            // set up wmc, run meu
+            let vars = decisions.clone();
+            let wmc = WmcParams::new(weight_map);
+            let (meu , _meu_assgn, _, _, _) = cnf.meu(builder.true_ptr(),  &vars, builder.num_vars(), &wmc);
+            let (meu_bb, _meu_assgn_bb) = cnf.bb(&vars, builder.num_vars(), &wmc);
 
-    //         println!("meu = {}, bb = {}\n", meu, meu_bb);
+            println!("meu = {}, bb = {}\n", meu, meu_bb);
 
-    //         // brute-force meu
-    //         let assignments = vec![(true, true, true), (true, true, false), (true, false, true), (true, false, false),
-    //                                (false, true, true), (false, true, false), (false, false, true), (false, false, false)];
-    //         let mut max : f64 = -10000.0;
-    //         let mut max_assgn : PartialModel = PartialModel::from_litvec(&[], c1.num_vars());
-    //         for (v1, v2, v3) in assignments.iter() {
-    //             let x = builder.var(decisions[0], *v1);
-    //             let y = builder.var(decisions[1], *v2);
-    //             let z = builder.var(decisions[2], *v3);
-    //             let mut conj = builder.and(x, y);
-    //             conj = builder.and(conj, z);
-    //             conj = builder.and(conj, cnf);
-    //             let poss_max = conj.unsmoothed_wmc(&wmc);
-    //             if poss_max.1 > max {
-    //                 max = poss_max.1;
-    //                 max_assgn.set(decisions[0], *v1);
-    //                 max_assgn.set(decisions[1], *v2);
-    //                 max_assgn.set(decisions[2], *v3);
-    //             }
-    //         }
+            // brute-force meu
+            let assignments = vec![(true, true, true), (true, true, false), (true, false, true), (true, false, false),
+                                   (false, true, true), (false, true, false), (false, false, true), (false, false, false)];
+            let mut max : f64 = -10000.0;
+            let mut max_assgn : PartialModel = PartialModel::from_litvec(&[], c1.num_vars());
+            for (v1, v2, v3) in assignments.iter() {
+                let x = builder.var(decisions[0], *v1);
+                let y = builder.var(decisions[1], *v2);
+                let z = builder.var(decisions[2], *v3);
+                let mut conj = builder.and(x, y);
+                conj = builder.and(conj, z);
+                conj = builder.and(conj, cnf);
+                let poss_max = conj.unsmoothed_wmc(&wmc);
+                if poss_max.1 > max {
+                    max = poss_max.1;
+                    max_assgn.set(decisions[0], *v1);
+                    max_assgn.set(decisions[1], *v2);
+                    max_assgn.set(decisions[2], *v3);
+                }
+            }
 
-    //         // and the actual checks.
-    //         // these checks test that the meus coincide.
-    //         let pr_check1 = f64::abs(meu.1 - meu_bb.1) < 0.00001;
-    //         let pr_check2 = f64::abs(max - meu.1)< 0.00001;
+            // and the actual checks.
+            // these checks test that the meus coincide.
+            let pr_check1 = f64::abs(meu.1 - meu_bb.1) < 0.00001;
+            let pr_check2 = f64::abs(max - meu.1)< 0.00001;
 
-    //         // the below tests (specifically, the bool pm_check)
-    //         // check that the partial models evaluate to the correct meu.
-    //         // these pms can be different b/c of symmetries/dead literals in the CNF.
-    //         // let mut pm_check = true;
-    //         // let extract = |ob : Option<bool>| -> bool {
-    //         //     match ob {
-    //         //         Some(b) => b,
-    //         //         None => panic!("none encountered")
-    //         //     }
-    //         // };
-    //         // let v : Vec<bool> = (0..3).map(|x| extract(meu_assgn.get(decisions[x]))).collect();
-    //         // let w : Vec<bool> = (0..3).map(|x| extract(meu_assgn_bb.get(decisions[x]))).collect();
-    //         // // if v != w {
-    //         // //     println!("{:?},{:?}",v,w);
-    //         // // }
-    //         // let v0 = builder.var(decisions[0], v[0]);
-    //         // let v1 = builder.var(decisions[1], v[1]);
-    //         // let v2 = builder.var(decisions[2], v[2]);
-    //         // let mut conj = builder.and(v0, v1);
-    //         // conj = builder.and(conj, v2);
-    //         // conj = builder.and(conj, cnf);
-    //         // let poss_max = conj.unsmoothed_wmc(&wmc);
-    //         // if f64::abs(poss_max.1 - max) > 0.0001 {
-    //         //     pm_check = false;
-    //         // }
-    //         // let w0 = builder.var(decisions[0], w[0]);
-    //         // let w1 = builder.var(decisions[1], w[1]);
-    //         // let w2 = builder.var(decisions[2], w[2]);
-    //         // let mut conj2 = builder.and(w0, w1);
-    //         // conj2 = builder.and(conj2, w2);
-    //         // builder.and(conj2, cnf);
-    //         // let poss_max2 = conj.unsmoothed_wmc(&wmc);
-    //         // if f64::abs(poss_max2.1 - max) > 0.0001 {
-    //         //     pm_check = false;
-    //         // }
+            // the below tests (specifically, the bool pm_check)
+            // check that the partial models evaluate to the correct meu.
+            // these pms can be different b/c of symmetries/dead literals in the CNF.
+            // let mut pm_check = true;
+            // let extract = |ob : Option<bool>| -> bool {
+            //     match ob {
+            //         Some(b) => b,
+            //         None => panic!("none encountered")
+            //     }
+            // };
+            // let v : Vec<bool> = (0..3).map(|x| extract(meu_assgn.get(decisions[x]))).collect();
+            // let w : Vec<bool> = (0..3).map(|x| extract(meu_assgn_bb.get(decisions[x]))).collect();
+            // // if v != w {
+            // //     println!("{:?},{:?}",v,w);
+            // // }
+            // let v0 = builder.var(decisions[0], v[0]);
+            // let v1 = builder.var(decisions[1], v[1]);
+            // let v2 = builder.var(decisions[2], v[2]);
+            // let mut conj = builder.and(v0, v1);
+            // conj = builder.and(conj, v2);
+            // conj = builder.and(conj, cnf);
+            // let poss_max = conj.unsmoothed_wmc(&wmc);
+            // if f64::abs(poss_max.1 - max) > 0.0001 {
+            //     pm_check = false;
+            // }
+            // let w0 = builder.var(decisions[0], w[0]);
+            // let w1 = builder.var(decisions[1], w[1]);
+            // let w2 = builder.var(decisions[2], w[2]);
+            // let mut conj2 = builder.and(w0, w1);
+            // conj2 = builder.and(conj2, w2);
+            // builder.and(conj2, cnf);
+            // let poss_max2 = conj.unsmoothed_wmc(&wmc);
+            // if f64::abs(poss_max2.1 - max) > 0.0001 {
+            //     pm_check = false;
+            // }
 
-    //         TestResult::from_bool(pr_check1 && pr_check2)
-    //     }
-    // }
+            TestResult::from_bool(pr_check1 && pr_check2)
+        }
+    }
 
     quickcheck! {
         fn smooth_and_unsmooth_bdd_agree(cnf: Cnf) -> bool {
