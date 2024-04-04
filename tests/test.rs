@@ -600,7 +600,7 @@ mod test_bdd_builder {
             // set up wmc, run meu
             let vars = decisions.clone();
             let wmc = WmcParams::new(weight_map);
-            let (meu , _meu_assgn, _, _, _) = cnf.meu(builder.true_ptr(),  &vars, builder.num_vars(), &wmc);
+            let (meu , _meu_assgn, _, _) = cnf.meu(builder.true_ptr(),  &vars, builder.num_vars(), &wmc);
             let (meu_bb, _meu_assgn_bb) = cnf.bb(&vars, builder.num_vars(), &wmc);
 
             println!("meu = {}, bb = {}\n", meu, meu_bb);

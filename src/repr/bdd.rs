@@ -661,9 +661,8 @@ impl<'a> BddPtr<'a> {
       decision_vars: &[VarLabel],
       wmc: &WmcParams<ExpectedUtility>,
       cur_assgn: PartialModel,
-      mut times_pruned : u64,
-      mut avg_size : f64
-    ) -> (ExpectedUtility, PartialModel, u64, f64) {
+      mut times_pruned : i64,
+    ) -> (ExpectedUtility, PartialModel, i64) {
       match decision_vars {
           // If all decision variables are assigned,
           [] => {
@@ -673,9 +672,9 @@ impl<'a> BddPtr<'a> {
                   / evidence.bb_lb(&cur_assgn, &decision_bitset, wmc);
               // If it's a better lb, update.
               if possible_best.1 > cur_lb.1 {
-                  (possible_best, cur_assgn, times_pruned, avg_size)
+                  (possible_best, cur_assgn, times_pruned)
               } else {
-                  (cur_lb, cur_best, times_pruned, avg_size)
+                  (cur_lb, cur_best, times_pruned)
               }
           }
           // If there exists an unassigned decision variable,
@@ -709,22 +708,20 @@ impl<'a> BddPtr<'a> {
               for (upper_bound, partialmodel) in order {
                   // branch + bound
                   if upper_bound.1 > best_lb.1 {
-                      (best_lb, best_model, times_pruned, avg_size) = self.meu_h(
+                      (best_lb, best_model, times_pruned) = self.meu_h(
                           evidence,
                           best_lb,
                           best_model,
                           end,
                           wmc,
                           partialmodel.clone(),
-                          times_pruned, avg_size
+                          times_pruned
                       )
                   }
                   else { 
-                    let mut total = avg_size * (times_pruned as f64) + (self.count_nodes() as f64);
-                    times_pruned = times_pruned + 1;
-                    avg_size = total / (times_pruned as f64);}
+                    times_pruned = times_pruned + 1;}
               }
-              (best_lb, best_model, times_pruned, avg_size)
+              (best_lb, best_model, times_pruned)
           }
       }
     }
@@ -737,9 +734,9 @@ impl<'a> BddPtr<'a> {
       decision_vars: &[VarLabel],
       num_vars: usize,
       wmc: &WmcParams<ExpectedUtility>,
-    ) -> (ExpectedUtility, PartialModel, u64, u64, f64) {
+    ) -> (ExpectedUtility, PartialModel, i64, i64) {
       // Initialize all the decision variables to be true
-      let size = self.count_nodes() as u64;
+      let size = self.count_nodes() as i64;
       let all_true: Vec<Literal> = decision_vars
           .iter()
           .map(|x| Literal::new(*x, true))
@@ -748,15 +745,15 @@ impl<'a> BddPtr<'a> {
       // Calculate bound wrt the partial instantiation.
       let lower_bound = self.eu_ub(&cur_assgn, &BitSet::new(), wmc)
           / evidence.bb_lb(&cur_assgn, &BitSet::new(), wmc);
-      let (a,b, times_pruned, avg_size) = self.meu_h(
+      let (a,b, times_pruned) = self.meu_h(
           evidence,
           lower_bound,
           cur_assgn,
           decision_vars,
           wmc,
-          PartialModel::from_litvec(&[], num_vars), 0, 0.0
+          PartialModel::from_litvec(&[], num_vars), 0
       );
-      (a,b, size, times_pruned, avg_size)
+      (a,b, size, times_pruned)
     }
 
     /// Below is experimental code with a generic branch and bound for T a BBAlgebra.
