@@ -898,8 +898,8 @@ impl<'a> BddPtr<'a> {
                 };
                 // the actual branching and bounding
                 for (upper_bound, partialmodel) in order {
-                    // if upper_bound == BBAlgebra::choose(&upper_bound, &best_lb) {
-                    if !PartialOrd::le(&upper_bound, &cur_lb) {
+                    if upper_bound == BBSemiring::choose(&upper_bound, &best_lb) {
+                    // if !PartialOrd::le(&upper_bound, &cur_lb) {
                         let (rec, rec_pm) =
                             self.bb_h(best_lb, best_model.clone(), end, wmc, partialmodel.clone());
                         let new_lb = BBSemiring::choose(&cur_lb, &rec);
