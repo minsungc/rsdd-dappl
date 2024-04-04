@@ -186,7 +186,7 @@ fn gen() {
     let wmc = WmcParams::new(eu_map);
 
     let now = Instant::now();
-    let (meu_num, pm) = end.meu(network_fail, &vars, builder.num_vars(), &wmc);
+    let (meu_num, pm, _, _, _) = end.meu(network_fail, &vars, builder.num_vars(), &wmc);
     println!(
         "Regular MEU: {} \nPM : {:?}",
         meu_num.1, pm.true_assignments
