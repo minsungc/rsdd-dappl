@@ -3,7 +3,7 @@
 use crate::repr::{Literal, VarLabel, VarSet};
 use std::fmt::Display;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct PartialModel {
     /// None if variable is unset
     pub true_assignments: VarSet,

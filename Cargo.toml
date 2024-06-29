@@ -9,7 +9,7 @@ description = "Rust decision diagrams."
 resolver = "2"
 
 [dependencies]
-ocaml = { version = "^1.0.0-beta" }
+ocaml = {git = "https://github.com/zshipko/ocaml-rs"}
 rand = "0.8.5"
 dimacs = "0.2.0"
 primal = "0.3.0"
