@@ -662,8 +662,7 @@ impl<'a> BddPtr<'a> {
       decision_vars: &[VarLabel],
       wmc: &WmcParams<ExpectedUtility>,
       cur_assgn: PartialModel,
-      mut times_pruned : i64,
-    ) -> (ExpectedUtility, PartialModel, i64) {
+    ) -> (ExpectedUtility, PartialModel) {
       match decision_vars {
           // If all decision variables are assigned,
           [] => {
@@ -673,9 +672,9 @@ impl<'a> BddPtr<'a> {
                   / evidence.bb_lb(&cur_assgn, &decision_bitset, wmc);
               // If it's a better lb, update.
               if possible_best.1 > cur_lb.1 {
-                  (possible_best, cur_assgn, times_pruned)
+                  (possible_best, cur_assgn)
               } else {
-                  (cur_lb, cur_best, times_pruned)
+                  (cur_lb, cur_best)
               }
           }
           // If there exists an unassigned decision variable,
@@ -708,21 +707,18 @@ impl<'a> BddPtr<'a> {
               };
               for (upper_bound, partialmodel) in order {
                   // branch + bound
-                  if upper_bound.1 > best_lb.1 {
-                      (best_lb, best_model, times_pruned) = self.meu_h(
+                  if !(upper_bound.le(&best_lb)) {
+                      (best_lb, best_model) = self.meu_h(
                           evidence,
                           best_lb,
                           best_model,
                           end,
                           wmc,
-                          partialmodel.clone(),
-                          times_pruned
+                          partialmodel.clone()
                       )
                   }
-                  else {
-                    times_pruned = times_pruned + 1;}
               }
-              (best_lb, best_model, times_pruned)
+              (best_lb, best_model)
           }
       }
     }
@@ -735,9 +731,9 @@ impl<'a> BddPtr<'a> {
       decision_vars: &[VarLabel],
       num_vars: usize,
       wmc: &WmcParams<ExpectedUtility>,
-    ) -> (ExpectedUtility, PartialModel, i64, i64) {
+    ) -> (ExpectedUtility, PartialModel, usize) {
       // Initialize all the decision variables to be true
-      let size = self.count_nodes() as i64;
+      let size = self.count_nodes();
       let all_true: Vec<Literal> = decision_vars
           .iter()
           .map(|x| Literal::new(*x, true))
@@ -746,15 +742,15 @@ impl<'a> BddPtr<'a> {
       // Calculate bound wrt the partial instantiation.
       let lower_bound = self.eu_ub(&cur_assgn, &BitSet::new(), wmc)
           / evidence.bb_lb(&cur_assgn, &BitSet::new(), wmc);
-      let (a,b, times_pruned) = self.meu_h(
+      let (a,b) = self.meu_h(
           evidence,
-          lower_bound,
+         lower_bound,
           cur_assgn,
           decision_vars,
           wmc,
-          PartialModel::from_litvec(&[], num_vars), 0
+          PartialModel::from_litvec(&[], num_vars)
       );
-      (a,b, size, times_pruned)
+      (a,b, size)
     }
 
     // branch and bound generic over T a BBAlgebra.
@@ -763,24 +759,25 @@ impl<'a> BddPtr<'a> {
         join_vars: &[VarLabel],
         num_vars: usize,
         wmc: &WmcParams<T>,
-    ) -> (T, PartialModel)
+    ) -> (T, PartialModel, usize)
     where
         T: 'static,
     {
-        // Initialize all the decision variables to be true, partially instantianted resp. to this
+        // Initialize all   the decision variables to be true, partially instantianted resp. to this
         let all_true: Vec<Literal> = join_vars.iter().map(|x| Literal::new(*x, true)).collect();
         let cur_assgn = PartialModel::from_litvec(&all_true, num_vars);
         // Calculate bound wrt the partial instantiation.
         let lower_bound = self.bb_ub(&cur_assgn, &BitSet::new(), wmc);
         let mut cache: HashMap<PartialModel, T> = HashMap::new();
-        self.bb_h(
+        let (val, pm) = self.bb_h(
             lower_bound,
             cur_assgn,
             join_vars,
             wmc,
             &mut cache,
             PartialModel::from_litvec(&[], num_vars),
-        )
+        );
+        (val, pm, self.count_nodes())
     }
 
     fn bb_h<T: BBSemiring>(

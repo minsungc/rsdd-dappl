@@ -493,7 +493,7 @@ mod test_bdd_builder {
             let wmc = WmcParams::new(weight_map);
 
             let (marg_prob, marg_assgn) = cnf.marginal_map(&vars, builder.num_vars(), &wmc);
-            let (marg_prob_bb, marg_assgn_bb) = cnf.bb(&vars, builder.num_vars(), &wmc);
+            let (marg_prob_bb, marg_assgn_bb, _) = cnf.bb(&vars, builder.num_vars(), &wmc);
             let assignments = vec![(true, true, true), (true, true, false), (true, false, true), (true, false, false),
                                    (false, true, true), (false, true, false), (false, false, true), (false, false, false)];
 
@@ -600,8 +600,14 @@ mod test_bdd_builder {
             // set up wmc, run meu
             let vars = decisions.clone();
             let wmc = WmcParams::new(weight_map);
-            let (meu , _meu_assgn, _, _) = cnf.meu(builder.true_ptr(),  &vars, builder.num_vars(), &wmc);
-            let (meu_bb, _meu_assgn_bb) = cnf.bb(&vars, builder.num_vars(), &wmc);
+            println!("
+                DEBUG INFO \n
+                CNF: {:?} \n
+                DECISION VARS: {:?} \n
+                WEIGHT MAP : {:?} \n                
+            ", c1, vars, wmc);
+            let (meu , _meu_assgn, _) = cnf.meu(builder.true_ptr(),  &vars, builder.num_vars(), &wmc);
+            let (meu_bb, _meu_assgn_bb, _) = cnf.bb(&vars, builder.num_vars(), &wmc);
 
             println!("meu = {}, bb = {}\n", meu, meu_bb);
 

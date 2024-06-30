@@ -1,0 +1,37 @@
+CNF:
+Cnf {
+    clauses: [
+        [Literal { label: VarLabel(7), polarity: true }],
+        [Literal { label: VarLabel(4), polarity: false }, Literal { label: VarLabel(5), polarity: false }],
+        [Literal { label: VarLabel(0), polarity: false }, Literal { label: VarLabel(2), polarity: false }],
+        [Literal { label: VarLabel(1), polarity: false }],
+        [Literal { label: VarLabel(1), polarity: true }, Literal { label: VarLabel(6), polarity: false }, Literal { label: VarLabel(7), polarity: true }]],
+    num_vars: 8,
+    hasher: CnfHasher {
+        weighted_cnf: [
+            [(2, Literal { label: VarLabel(7), polarity: true })],
+            [(3, Literal { label: VarLabel(4), polarity: false }), (5, Literal { label: VarLabel(5), polarity: false })],
+            [(7, Literal { label: VarLabel(0), polarity: false }), (11, Literal { label: VarLabel(2), polarity: false })],
+            [(13, Literal { label: VarLabel(1), polarity: false })],
+            [(17, Literal { label: VarLabel(1), polarity: true }), (19, Literal { label: VarLabel(6), polarity: false }), (23, Literal { label: VarLabel(7), polarity: true })]],
+        state: [{1, 2, 4}],
+    pos_lits: [[], [4], [], [], [], [], [], [0, 4]],
+    neg_lits: [[2], [3], [2], [], [1], [1], [4], []]
+} }
+
+DECISION VARS: [VarLabel(4), VarLabel(2), VarLabel(5)]
+
+WEIGHT MAP :
+WmcParams {
+    zero: ExpectedUtility(0.0, 0.0),
+    one: ExpectedUtility(1.0, 0.0),
+    var_to_val: [
+        "0: l: ExpectedUtility(0.7989457205308921, 0.0), h: ExpectedUtility(0.20105427946910792, 0.0)",
+        "1: l: ExpectedUtility(0.34576400389303186, 0.0), h: ExpectedUtility(0.6542359961069681, 0.0)",
+        "2: l: ExpectedUtility(1.0, 0.0), h: ExpectedUtility(1.0, 0.0)",
+        "3: l: ExpectedUtility(0.8943415014250442, 0.0), h: ExpectedUtility(0.1056584985749558, 0.0)",
+        "4: l: ExpectedUtility(1.0, 0.0), h: ExpectedUtility(1.0, 0.0)",
+        "5: l: ExpectedUtility(1.0, 0.0), h: ExpectedUtility(1.0, 0.0)",
+        "6: l: ExpectedUtility(1.0, 0.0), h: ExpectedUtility(1.0, 10.0)",
+        "7: l: ExpectedUtility(1.0, 0.0), h: ExpectedUtility(1.0, 10.0)"]
+}
