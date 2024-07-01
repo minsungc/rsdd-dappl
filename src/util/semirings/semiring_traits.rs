@@ -26,13 +26,15 @@ pub trait JoinSemilattice: PartialOrd {
 
 // A branch-and-bound semiring is a semiring join-semilattice with a
 // compatible total order `choose`.
-pub trait BBSemiring: Semiring + JoinSemilattice {
+pub trait BBSemiring: Semiring + JoinSemilattice + MeetSemilattice {
     fn choose(&self, arg: &Self) -> Self;
 }
 
 pub trait BBRing: Ring + JoinSemilattice {
     fn choose(&self, arg: &Self) -> Self;
 }
+
+pub trait BBSemiringWithDiv: BBSemiring + ops::Div<Self, Output = Self>  {}
 
 // A meet-semilattice is a set equipped with a partial order
 // that also admits a least upper bound (called join) for any two elements.

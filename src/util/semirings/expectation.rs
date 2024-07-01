@@ -111,3 +111,5 @@ impl ops::Div<ExpectedUtility> for ExpectedUtility {
         }
     }
 }
+
+impl BBSemiringWithDiv for ExpectedUtility {}

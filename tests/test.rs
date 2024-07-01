@@ -493,7 +493,7 @@ mod test_bdd_builder {
             let wmc = WmcParams::new(weight_map);
 
             let (marg_prob, marg_assgn) = cnf.marginal_map(&vars, builder.num_vars(), &wmc);
-            let (marg_prob_bb, marg_assgn_bb, _) = cnf.bb(&vars, builder.num_vars(), &wmc);
+            let (marg_prob_bb, marg_assgn_bb, _) = cnf.bb(BddPtr::PtrTrue, &vars, builder.num_vars(), &wmc);
             let assignments = vec![(true, true, true), (true, true, false), (true, false, true), (true, false, false),
                                    (false, true, true), (false, true, false), (false, false, true), (false, false, false)];
 
@@ -558,14 +558,17 @@ mod test_bdd_builder {
     }
 
     quickcheck! {
-        fn meu(c1: Cnf) -> TestResult {
+        fn meu(c1: Cnf, c2:Cnf) -> TestResult {
             use rsdd::repr::PartialModel;
             let n = c1.num_vars();
             // constrain the size, make BDD
-            if !(5..=8).contains(&n) { return TestResult::discard() }
-            if c1.clauses().len() > 14 { return TestResult::discard() }
+            if !(4..=7).contains(&n) { return TestResult::discard() }
+            // if n != 6 || n != 5  { return TestResult::discard() }
+            if c2.num_vars() >= n || c2.clauses().len() > c1.clauses().len() { return TestResult::discard() }
+            if (c1.clauses().len() > 3) && (c2.clauses().len() > 3) { return TestResult::discard() }
             let builder = super::RobddBuilder::<AllIteTable<BddPtr>>::new_with_linear_order(n);
-            let cnf = builder.compile_cnf(&c1);
+            let cnf1 = builder.compile_cnf(&c1);
+            let cnf2 = builder.compile_cnf(&c2);
 
             // randomizing the decisions
             let mut rng = rand::thread_rng();
@@ -600,14 +603,8 @@ mod test_bdd_builder {
             // set up wmc, run meu
             let vars = decisions.clone();
             let wmc = WmcParams::new(weight_map);
-            println!("
-                DEBUG INFO \n
-                CNF: {:?} \n
-                DECISION VARS: {:?} \n
-                WEIGHT MAP : {:?} \n                
-            ", c1, vars, wmc);
-            let (meu , _meu_assgn, _) = cnf.meu(builder.true_ptr(),  &vars, builder.num_vars(), &wmc);
-            let (meu_bb, _meu_assgn_bb, _) = cnf.bb(&vars, builder.num_vars(), &wmc);
+            let (meu , _meu_assgn, _) = cnf1.meu(cnf2,  &vars, builder.num_vars(), &wmc);
+            let (meu_bb, _meu_assgn_bb, _) = cnf1.bb(cnf2, &vars, builder.num_vars(), &wmc);
 
             println!("meu = {}, bb = {}\n", meu, meu_bb);
 
@@ -620,10 +617,18 @@ mod test_bdd_builder {
                 let x = builder.var(decisions[0], *v1);
                 let y = builder.var(decisions[1], *v2);
                 let z = builder.var(decisions[2], *v3);
-                let mut conj = builder.and(x, y);
-                conj = builder.and(conj, z);
-                conj = builder.and(conj, cnf);
-                let poss_max = conj.unsmoothed_wmc(&wmc);
+                let conj = builder.and(x, y);
+                let conj = builder.and(conj, z);
+                let conj_cnf1 = builder.and(conj, cnf1);
+                let conj_cnf2 = builder.and(conj, cnf2);
+                let poss_max = conj_cnf1.unsmoothed_wmc(&wmc) / conj_cnf2.unsmoothed_wmc(&wmc);
+                // If the normalized probability is > 1 then the test was unsound
+                if poss_max.0 > 1.0 { return TestResult::discard() }
+                println!("ASSGN: {:?} \nVAL :{:?}",
+                    (
+                        (decisions[0], v1),
+                        (decisions[1], v2),
+                        (decisions[2], v3)) , poss_max);
                 if poss_max.1 > max {
                     max = poss_max.1;
                     max_assgn.set(decisions[0], *v1);
@@ -632,11 +637,38 @@ mod test_bdd_builder {
                 }
             }
 
+
+
             // and the actual checks.
             // these checks test that the meus coincide.
             let pr_check1 = f64::abs(meu.1 - meu_bb.1) < 0.00001;
-            let pr_check2 = f64::abs(max - meu.1)< 0.00001;
+            let pr_check2 = f64::abs(max - meu_bb.1)< 0.00001;
 
+            if !pr_check1 {
+                println!("
+                MEU VS BB CHECK FAILED! \n
+                BB : {:?} \n
+                MEU : {:?} \n
+                MAX : {:?} \n
+                DEBUG INFO \n
+                CNF: {:?} \n
+                EVIDENCE: {:?} \n
+                DECISION VARS: {:?} \n
+                WEIGHT MAP : {:?} \n\n\n
+            ", meu_bb, meu, max, c1, c2, vars, wmc);
+            }
+            if !pr_check2 {
+                println!("
+                MAX VS BB CHECK FAILED! \n
+                BB : {:?} \n
+                MAX : {:?} \n
+                DEBUG INFO \n
+                CNF: {:?} \n
+                EVIDENCE: {:?} \n
+                DECISION VARS: {:?} \n
+                WEIGHT MAP : {:?} \n\n\n                
+            ", meu_bb, max, c1, c2, vars, wmc);
+            }
             // the below tests (specifically, the bool pm_check)
             // check that the partial models evaluate to the correct meu.
             // these pms can be different b/c of symmetries/dead literals in the CNF.

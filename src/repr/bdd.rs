@@ -1,13 +1,7 @@
 //! Binary decision diagram representation
 
 use crate::{
-    repr::PartialModel,
-    repr::VarOrder,
-    repr::WmcParams,
-    repr::{DDNNFPtr, DDNNF},
-    repr::{Literal, VarLabel, VarSet},
-    util::semirings::{BBSemiring, FiniteField, JoinSemilattice, RealSemiring},
-    util::semirings::{ExpectedUtility, LatticeWithChoose, MeetSemilattice}, builder::bdd,
+    repr::{DDNNFPtr, Literal, PartialModel, VarLabel, VarOrder, VarSet, WmcParams, DDNNF}, util::semirings::{BBSemiring, BBSemiringWithDiv, ExpectedUtility, FiniteField, JoinSemilattice, MeetSemilattice, RealSemiring}
 };
 use bit_set::BitSet;
 use core::fmt::Debug;
@@ -15,10 +9,9 @@ use std::{
     any::Any,
     cell::RefCell,
     collections::HashMap,
-    collections::hash_map,
     hash::{Hash, Hasher},
     iter::FromIterator,
-    ptr, f64::NEG_INFINITY,
+    ptr,
 };
 use BddPtr::*;
 
@@ -615,44 +608,6 @@ impl<'a> BddPtr<'a> {
         )
     }
 
-    /// upper-bounding the expected utility, for meu_h
-    fn eu_ub(
-      &self,
-      partial_decisions: &PartialModel,
-      decision_vars: &BitSet,
-      wmc: &WmcParams<ExpectedUtility>,
-    ) -> ExpectedUtility {
-      // println!("Assigned decision variables: {:?}", partial_decisions);
-
-      // accumulator for EU via bdd_fold
-
-      self.bdd_fold(
-          &|varlabel, low: ExpectedUtility, high: ExpectedUtility| {
-              // get True and False weights for VarLabel
-              let (false_w, true_w) = wmc.var_weight(varlabel);
-              // Check if our partial model has already assigned my variable.
-              match partial_decisions.get(varlabel) {
-                  // If not...
-                  None => {
-                      // If it's a decision variable, we do
-                      if decision_vars.contains(varlabel.value_usize()) {
-                          let max_pr = f64::max(low.0, high.0);
-                          let max_eu = f64::max(low.1, high.1);
-                          ExpectedUtility(max_pr, max_eu)
-                      // Otherwise it's just a probabilistic variable so you do
-                      // the usual stuff...
-                      } else {
-                          (*false_w * low) + (*true_w * high)
-                      }
-                  }
-                  Some(true) => high,
-                  Some(false) => low,
-              }
-          },
-          wmc.zero,
-          wmc.one,
-      )
-    }
 
     fn meu_h(
       &self,
@@ -668,7 +623,7 @@ impl<'a> BddPtr<'a> {
           [] => {
               // Run the eu ub
               let decision_bitset = BitSet::new();
-              let possible_best = self.eu_ub(&cur_assgn, &decision_bitset, wmc)
+              let possible_best = self.bb_ub(&cur_assgn, &decision_bitset, wmc)
                   / evidence.bb_lb(&cur_assgn, &decision_bitset, wmc);
               // If it's a better lb, update.
               if possible_best.1 > cur_lb.1 {
@@ -690,8 +645,8 @@ impl<'a> BddPtr<'a> {
               false_model.set(*x, false);
 
               // and calculate their respective upper bounds.
-              let true_ub_num = self.eu_ub(&true_model, &margvar_bits, wmc);
-              let false_ub_num = self.eu_ub(&false_model, &margvar_bits, wmc);
+              let true_ub_num = self.bb_ub(&true_model, &margvar_bits, wmc);
+              let false_ub_num = self.bb_ub(&false_model, &margvar_bits, wmc);
 
               let true_ub_dec = evidence.bb_lb(&true_model, &margvar_bits, wmc);
               let false_ub_dec = evidence.bb_lb(&false_model, &margvar_bits, wmc);
@@ -705,17 +660,14 @@ impl<'a> BddPtr<'a> {
               } else {
                   [(false_ub, false_model), (true_ub, true_model)]
               };
+              let fixed_lb = best_lb.clone();
               for (upper_bound, partialmodel) in order {
                   // branch + bound
-                  if !(upper_bound.le(&best_lb)) {
-                      (best_lb, best_model) = self.meu_h(
-                          evidence,
-                          best_lb,
-                          best_model,
-                          end,
-                          wmc,
-                          partialmodel.clone()
-                      )
+                  if !(upper_bound.lt(&fixed_lb)) {
+                    let (rec, rec_pm) =
+                            self.meu_h(evidence, best_lb, best_model.clone(), end, wmc, partialmodel.clone());
+                        let new_lb = BBSemiring::choose(&cur_lb, &rec);
+                        if new_lb == rec { (best_lb, best_model) = (new_lb, rec_pm); }
                   }
               }
               (best_lb, best_model)
@@ -734,28 +686,26 @@ impl<'a> BddPtr<'a> {
     ) -> (ExpectedUtility, PartialModel, usize) {
       // Initialize all the decision variables to be true
       let size = self.count_nodes();
-      let all_true: Vec<Literal> = decision_vars
-          .iter()
-          .map(|x| Literal::new(*x, true))
-          .collect();
+      let all_true: Vec<Literal> = decision_vars.iter().map(|x| Literal::new(*x, true)).collect();
       let cur_assgn = PartialModel::from_litvec(&all_true, num_vars);
       // Calculate bound wrt the partial instantiation.
-      let lower_bound = self.eu_ub(&cur_assgn, &BitSet::new(), wmc)
+      let lower_bound = self.bb_ub(&cur_assgn, &BitSet::new(), wmc)
           / evidence.bb_lb(&cur_assgn, &BitSet::new(), wmc);
       let (a,b) = self.meu_h(
-          evidence,
-         lower_bound,
-          cur_assgn,
-          decision_vars,
-          wmc,
-          PartialModel::from_litvec(&[], num_vars)
+            evidence,
+            lower_bound,
+            cur_assgn,
+            decision_vars,
+            wmc,
+            PartialModel::from_litvec(&[], num_vars)
       );
       (a,b, size)
     }
 
     // branch and bound generic over T a BBAlgebra.
-    pub fn bb<T: BBSemiring>(
+    pub fn bb<T: BBSemiringWithDiv>(
         &self,
+        evidence: BddPtr,
         join_vars: &[VarLabel],
         num_vars: usize,
         wmc: &WmcParams<T>,
@@ -763,13 +713,25 @@ impl<'a> BddPtr<'a> {
     where
         T: 'static,
     {
-        // Initialize all   the decision variables to be true, partially instantianted resp. to this
+        println!("\n\n\n NEW TEST\n");
+        // Initialize all the decision variables to be true, partially instantianted resp. to this
         let all_true: Vec<Literal> = join_vars.iter().map(|x| Literal::new(*x, true)).collect();
         let cur_assgn = PartialModel::from_litvec(&all_true, num_vars);
         // Calculate bound wrt the partial instantiation.
-        let lower_bound = self.bb_ub(&cur_assgn, &BitSet::new(), wmc);
+        // println!("UB CALCULATED IS {:?}\n",
+            //     self.bb_ub(&PartialModel::new(0),
+            //     &BitSet::from_iter(join_vars.iter().map(|x| x.value_usize())),
+            //     wmc)
+            //     /
+            //     evidence.bb_lb(&PartialModel::new(0),
+            //     &BitSet::from_iter(join_vars.iter().map(|x| x.value_usize())),
+            //     wmc)
+            // );
+        let lower_bound = self.bb_ub(&cur_assgn, &BitSet::new(), wmc)
+            / evidence.bb_lb(&cur_assgn, &BitSet::new(), wmc);
         let mut cache: HashMap<PartialModel, T> = HashMap::new();
         let (val, pm) = self.bb_h(
+            evidence,
             lower_bound,
             cur_assgn,
             join_vars,
@@ -777,11 +739,13 @@ impl<'a> BddPtr<'a> {
             &mut cache,
             PartialModel::from_litvec(&[], num_vars),
         );
+        println!("\n\n{:?}\n\n", cache);
         (val, pm, self.count_nodes())
     }
 
-    fn bb_h<T: BBSemiring>(
+    fn bb_h<T: BBSemiringWithDiv>(
         &self,
+        evidence: BddPtr,
         cur_lb: T,
         cur_best: PartialModel,
         join_vars: &[VarLabel],
@@ -799,19 +763,22 @@ impl<'a> BddPtr<'a> {
                 // Run the bb_ub
                 let empty_join_vars = BitSet::new();
                 let possible_best = match cache.get(&cur_assgn) {
-                    Some(v) => {println!("there was a cache hit!\n"); v} ,
+                    Some(v) => {v} ,
                     None => {
                         let ub = self.bb_ub(&cur_assgn, &empty_join_vars, wmc);
-                        cache.insert(cur_assgn, ub.clone());
+                        let lb = evidence.bb_lb(&cur_assgn, &empty_join_vars, wmc);
+                        println!("got ub lb for total policy: {:?} , {:?} \n", ub, lb);
+                        let v = cache.insert(cur_assgn, ub.clone() / lb.clone());
+                        if v != None {panic!()}
                         cache.get(&assgn_clone).unwrap()
                     },
                 };
                 // If it's a better lb, update.
                 let best = BBSemiring::choose(&cur_lb, &possible_best);
                 if cur_lb == best {
-                    (cur_lb, cur_best)
+                    return (cur_lb, cur_best)
                 } else {
-                    (*possible_best, assgn_clone)
+                    return (*possible_best, assgn_clone)
                 }
             }
             // If there exists an unassigned decision variable,
@@ -825,23 +792,25 @@ impl<'a> BddPtr<'a> {
                     let mut model = cur_assgn.clone();
                     model.set(*x, *elt);
                     let model_clone = model.clone();
-                    let vref = cache.entry(model).or_insert(self.bb_ub(&model_clone, &join_vars_bits, wmc));
+                    let vref = cache.entry(model).or_insert(
+                        self.bb_ub(&model_clone, &join_vars_bits, wmc)
+                        / evidence.bb_lb(&model_clone, &join_vars_bits, wmc));
                     vc.push((model_clone, *vref))
                 }
+                // println!("here are the best we can do:\n\t {:?}\n\t{:?}", vc[0], vc[1]);
                 // the actual branching and bounding
+                let fixed_lb = cur_lb.clone();
                 for (model, bound) in vc.iter() {
-                    if !(bound.le(&&cur_lb)) {
+                    if !(bound.lt(&fixed_lb)) {
                         let (rec, rec_pm) =
-                            self.bb_h(best_lb, best_model.clone(), end, wmc, cache, model.clone());
+                            self.bb_h(evidence, best_lb, best_model.clone(), end, wmc, cache, model.clone());
                         let new_lb = BBSemiring::choose(&cur_lb, &rec);
-                        if new_lb == rec {
-                            (best_lb, best_model) = (rec, rec_pm);
-                        } else {
-                            (best_lb, best_model) = (cur_lb, cur_best.clone());
-                        }
+                        if new_lb == rec { (best_lb, best_model) = (new_lb, rec_pm); }
+                    } else {
+                        println!("PRUNING total models of {:?} \n", model);
                     }
                 }
-                (best_lb, best_model)
+                return (best_lb, best_model)
             }
         }
     }
@@ -849,7 +818,7 @@ impl<'a> BddPtr<'a> {
 
     /// Below is experimental code with a generic branch and bound for T a BBAlgebra.
     /// upper-bounding the expected utility, for meu_h
-    fn bb_ub<T: BBSemiring>(
+    fn bb_ub<T: BBSemiringWithDiv>(
         &self,
         partial_join_assgn: &PartialModel,
         join_vars: &BitSet,
@@ -858,6 +827,11 @@ impl<'a> BddPtr<'a> {
     where
         T: 'static,
     {
+        if self.is_true() {
+            return T::one()
+        }  else if self.is_false() {
+            return T::zero()
+        }
         let mut partial_join_acc = T::one();
         for lit in partial_join_assgn.assignment_iter() {
             let (l, h) = wmc.var_weight(lit.label());
@@ -899,7 +873,7 @@ impl<'a> BddPtr<'a> {
     }
 
     /// lower-bounding the expected utility, for meu_h
-    fn bb_lb<T: LatticeWithChoose>(
+    fn bb_lb<T: BBSemiringWithDiv>(
         &self,
         partial_join_assgn: &PartialModel,
         join_vars: &BitSet,
@@ -908,6 +882,11 @@ impl<'a> BddPtr<'a> {
     where
         T: 'static,
     {
+        if self.is_true() {
+            return T::one()
+        }  else if self.is_false() {
+            return T::zero()
+        }
         let mut partial_join_acc = T::one();
         for lit in partial_join_assgn.assignment_iter() {
             let (l, h) = wmc.var_weight(lit.label());
@@ -917,6 +896,7 @@ impl<'a> BddPtr<'a> {
                 partial_join_acc = partial_join_acc * (*l);
             }
         }
+        // println!("partial_join_acc is {:?}\n", partial_join_acc);
         // top-down LB calculation via bdd_fold
         let v = self.bdd_fold(
             &|varlabel, low: T, high: T| {

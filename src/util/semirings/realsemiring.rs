@@ -73,3 +73,13 @@ impl MeetSemilattice for RealSemiring {
 impl Lattice for RealSemiring {}
 
 impl EdgeboundingRing for RealSemiring {}
+
+impl ops::Div<RealSemiring> for RealSemiring {
+    type Output = RealSemiring;
+
+    fn div(self, rhs: RealSemiring) -> Self::Output {
+        RealSemiring(self.0 / rhs.0)
+    }
+}
+
+impl BBSemiringWithDiv for RealSemiring {}
