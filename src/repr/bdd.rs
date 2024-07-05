@@ -713,7 +713,7 @@ impl<'a> BddPtr<'a> {
     where
         T: 'static,
     {
-        println!("\n\n\n NEW TEST\n");
+        // println!("\n\n\n NEW TEST\n");
         // Initialize all the decision variables to be true, partially instantianted resp. to this
         let all_true: Vec<Literal> = join_vars.iter().map(|x| Literal::new(*x, true)).collect();
         let cur_assgn = PartialModel::from_litvec(&all_true, num_vars);
@@ -739,7 +739,7 @@ impl<'a> BddPtr<'a> {
             &mut cache,
             PartialModel::from_litvec(&[], num_vars),
         );
-        println!("\n\n{:?}\n\n", cache);
+        // println!("\n\n{:?}\n\n", cache);
         (val, pm, self.count_nodes())
     }
 
@@ -767,7 +767,7 @@ impl<'a> BddPtr<'a> {
                     None => {
                         let ub = self.bb_ub(&cur_assgn, &empty_join_vars, wmc);
                         let lb = evidence.bb_lb(&cur_assgn, &empty_join_vars, wmc);
-                        println!("got ub lb for total policy: {:?} , {:?} \n", ub, lb);
+                        // println!("got ub lb for total policy: {:?} , {:?} \n", ub, lb);
                         let v = cache.insert(cur_assgn, ub.clone() / lb.clone());
                         if v != None {panic!()}
                         cache.get(&assgn_clone).unwrap()
@@ -807,7 +807,7 @@ impl<'a> BddPtr<'a> {
                         let new_lb = BBSemiring::choose(&cur_lb, &rec);
                         if new_lb == rec { (best_lb, best_model) = (new_lb, rec_pm); }
                     } else {
-                        println!("PRUNING total models of {:?} \n", model);
+                        // println!("PRUNING total models of {:?} \n", model);
                     }
                 }
                 return (best_lb, best_model)
